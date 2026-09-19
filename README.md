@@ -2,9 +2,22 @@
 
 A personal work journal for developers. Instead of a blank page, every entry is a short guided form, so there's never a "what do I even write?" moment.
 
-**Live demo: https://devlog-eta-eight.vercel.app** &mdash; create an account with any email and password. The demo is a real, shared instance: entries are stored in its database and its owner can technically read them, so don't write anything sensitive there.
+**Live demo: https://devlog-ng.vercel.app** &mdash; create an account with any email and password. The demo is a real, shared instance: entries are stored in its database and its owner can technically read them, so don't write anything sensitive there.
 
 Built with Node and Express, a libSQL database (a local SQLite file in development, Turso in production), and a dependency-light vanilla-JS frontend with no build step. It's deployed on Vercel's free plan. Under *Design / security notes* and *Deploy for free* below you'll find how authentication, rate limiting and the hosting setup work.
+
+## Screenshots
+
+<p align="center">
+  <img src="docs/screenshots/dashboard.png" width="49%" alt="Dashboard: day and week streaks, notes carried over from the last entry, and recent entries">
+  <img src="docs/screenshots/new-entry.png" width="49%" alt="The guided new-entry form: numbered prompts with coaching hints and example placeholders">
+</p>
+<p align="center">
+  <img src="docs/screenshots/stats.png" width="66%" alt="Stats: entries per week, mood over time, and a tooltip on a hovered bar">
+  <img src="docs/screenshots/mobile.png" width="27%" alt="The phone layout with a bottom tab bar and a raised New button">
+</p>
+
+<sub>Dashboard, guided entry form, stats, and the phone layout. The screenshots use sample data.</sub>
 
 ## Run it
 
