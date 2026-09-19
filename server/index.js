@@ -1,26 +1,15 @@
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { createApp } from './app.js';
-import { openDb } from './db.js';
-
-const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const dbFile = process.env.DEVLOG_DB ?? path.join(root, 'data', 'devlog.db');
-fs.mkdirSync(path.dirname(dbFile), { recursive: true });
+// Local / self-hosted runner: `npm start`. (On Vercel, ../index.js is used instead.)
+import app, { db } from '../index.js';
 
 const port = Number(process.env.PORT ?? 3000);
 // Personal data: listen on localhost only unless told otherwise.
 const host = process.env.HOST ?? '127.0.0.1';
-const allowSignup = process.env.ALLOW_SIGNUP !== 'false';
 
-const db = openDb(dbFile);
-const app = createApp({ db, allowSignup });
 const server = app.listen(port, host, () => {
   console.log(`DevLog running at http://${host === '0.0.0.0' ? 'localhost' : host}:${port}`);
 });
 
-// Hosts stop the process with SIGTERM on every deploy: finish in-flight requests,
-// then close SQLite so its write-ahead log is folded back into the database file.
+// Finish in-flight requests on SIGTERM/SIGINT, then close the database cleanly.
 for (const signal of ['SIGTERM', 'SIGINT']) {
   process.on(signal, () => {
     server.close(() => {

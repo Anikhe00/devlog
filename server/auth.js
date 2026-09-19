@@ -1,5 +1,6 @@
 import crypto from 'node:crypto';
 import { promisify } from 'node:util';
+import { toObjects } from './db.js';
 
 const scrypt = promisify(crypto.scrypt);
 const COST = { N: 16384, r: 8, p: 1 };
@@ -35,23 +36,35 @@ const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex'
 
 /** Opaque random tokens in a cookie; only their hash is stored server-side. */
 export function createSessionStore(db) {
-  const insert = db.prepare('INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)');
-  const find = db.prepare(`
-    SELECT u.id, u.email, u.default_cadence
-    FROM sessions s JOIN users u ON u.id = s.user_id
-    WHERE s.token_hash = ? AND s.expires_at > ?`);
-  const remove = db.prepare('DELETE FROM sessions WHERE token_hash = ?');
-  const purge = db.prepare('DELETE FROM sessions WHERE expires_at <= ?');
-
   return {
-    create(userId) {
+    async create(userId) {
       const token = crypto.randomBytes(32).toString('base64url');
-      insert.run(sha256(token), userId, Date.now() + SESSION_TTL_MS);
+      await db.execute({
+        sql: 'INSERT INTO sessions (token_hash, user_id, expires_at) VALUES (?, ?, ?)',
+        args: [sha256(token), userId, Date.now() + SESSION_TTL_MS],
+      });
       return token;
     },
-    user: (token) => find.get(sha256(token), Date.now()) ?? null,
-    destroy: (token) => remove.run(sha256(token)),
-    purgeExpired: () => purge.run(Date.now()),
+    async user(token) {
+      const result = await db.execute({
+        sql: `SELECT u.id, u.email, u.default_cadence
+              FROM sessions s JOIN users u ON u.id = s.user_id
+              WHERE s.token_hash = ? AND s.expires_at > ?`,
+        args: [sha256(token), Date.now()],
+      });
+      return toObjects(result)[0] ?? null;
+    },
+    destroy: (token) => db.execute({ sql: 'DELETE FROM sessions WHERE token_hash = ?', args: [sha256(token)] }),
+    async purgeExpired() {
+      const now = Date.now();
+      await db.batch(
+        [
+          { sql: 'DELETE FROM sessions WHERE expires_at <= ?', args: [now] },
+          { sql: 'DELETE FROM rate_limits WHERE reset_at <= ?', args: [now] },
+        ],
+        'write',
+      );
+    },
   };
 }
 
@@ -71,28 +84,31 @@ export function readCookie(req, name) {
   return null;
 }
 
-/** Fixed-window in-memory limiter. Enough to blunt password guessing on a personal instance. */
-export function rateLimit({ windowMs, max, key }) {
-  const hits = new Map();
-  setInterval(() => {
-    const now = Date.now();
-    for (const [k, v] of hits) if (v.resetAt <= now) hits.delete(k);
-  }, windowMs).unref();
+// One atomic statement: start a new window if the old one expired, otherwise count up.
+const HIT = `
+  INSERT INTO rate_limits (key, count, reset_at) VALUES (?, 1, ?)
+  ON CONFLICT(key) DO UPDATE SET
+    count    = CASE WHEN reset_at <= ? THEN 1 ELSE count + 1 END,
+    reset_at = CASE WHEN reset_at <= ? THEN ? ELSE reset_at END
+  RETURNING count, reset_at`;
 
-  const middleware = (req, res, next) => {
+/**
+ * Fixed-window limiter, stored in the database so it holds across serverless instances.
+ * Enough to blunt password guessing on a small instance.
+ */
+export function rateLimit({ db, name, windowMs, max, key }) {
+  const bucket = (req) => `${name}:${key(req)}`;
+
+  const middleware = async (req, res, next) => {
     const now = Date.now();
-    const k = key(req);
-    let hit = hits.get(k);
-    if (!hit || hit.resetAt <= now) {
-      hit = { count: 0, resetAt: now + windowMs };
-      hits.set(k, hit);
-    }
-    if (++hit.count > max) {
-      res.set('Retry-After', String(Math.ceil((hit.resetAt - now) / 1000)));
+    const result = await db.execute({ sql: HIT, args: [bucket(req), now + windowMs, now, now, now + windowMs] });
+    const { count, reset_at } = toObjects(result)[0];
+    if (count > max) {
+      res.set('Retry-After', String(Math.ceil((reset_at - now) / 1000)));
       return res.status(429).json({ error: 'Too many attempts. Try again in a few minutes.' });
     }
     next();
   };
-  middleware.reset = (req) => hits.delete(key(req));
+  middleware.reset = (req) => db.execute({ sql: 'DELETE FROM rate_limits WHERE key = ?', args: [bucket(req)] });
   return middleware;
 }

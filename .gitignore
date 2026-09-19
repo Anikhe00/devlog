@@ -1,3 +1,10 @@
 node_modules/
 data/
+public/vendor/
 .DS_Store
+.vercel/
+.env
+.env.*
+devlog.db
+devlog.db-shm
+devlog.db-wal

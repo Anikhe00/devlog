@@ -1,4 +1,6 @@
-import Database from 'better-sqlite3';
+import fs from 'node:fs';
+import path from 'node:path';
+import { createClient } from '@libsql/client';
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS users (
@@ -38,12 +40,29 @@ CREATE TABLE IF NOT EXISTS entry_tags (
   PRIMARY KEY (entry_id, tag)
 );
 CREATE INDEX IF NOT EXISTS idx_entry_tags_tag ON entry_tags(tag);
+
+-- Fixed-window counters for login / sign-up throttling. They live in the database rather
+-- than in memory so the limit still holds when the host runs many short-lived instances.
+CREATE TABLE IF NOT EXISTS rate_limits (
+  key      TEXT PRIMARY KEY,
+  count    INTEGER NOT NULL,
+  reset_at INTEGER NOT NULL
+);
 `;
 
-export function openDb(file) {
-  const db = new Database(file);
-  db.pragma('journal_mode = WAL');
-  db.pragma('foreign_keys = ON');
-  db.exec(SCHEMA);
-  return db;
+/**
+ * A client for a local SQLite file (`file:…`) or a hosted Turso database (`libsql://…`).
+ * Nothing is sent until the first query; call initSchema() before serving requests.
+ */
+export function connect({ url, authToken }) {
+  if (url.startsWith('file:') && !url.includes(':memory:')) {
+    fs.mkdirSync(path.dirname(url.slice('file:'.length)), { recursive: true });
+  }
+  return createClient({ url, authToken });
 }
+
+export const initSchema = (db) => db.executeMultiple(SCHEMA);
+
+/** libsql rows are array-like; this turns a result into plain { column: value } objects. */
+export const toObjects = (result) =>
+  result.rows.map((row) => Object.fromEntries(result.columns.map((name, i) => [name, row[i]])));
