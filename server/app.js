@@ -47,6 +47,12 @@ export function createApp({ db, allowSignup = true, registerLimit = 10 }) {
     next();
   });
 
+  // Liveness check for the host's load balancer; also proves the database is reachable.
+  app.get('/health', (req, res) => {
+    db.prepare('SELECT 1').get();
+    res.json({ ok: true });
+  });
+
   // ---- static frontend ----------------------------------------------------
   app.use(express.static(path.join(ROOT, 'public')));
   const vendor = (name, file) =>

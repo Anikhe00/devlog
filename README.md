@@ -40,6 +40,23 @@ Create an account on the sign-in screen and start writing. Requires Node 20+.
 - Markdown is sanitised with DOMPurify, and a strict CSP (`default-src 'self'`) is sent with every response. There are no external fonts, scripts or requests.
 - The client sends its own local date for "today", so streaks follow *your* timezone, not the server's.
 
+## Deploy to Render
+
+The repo includes a [Render Blueprint](render.yaml): one web service plus a persistent disk for the SQLite file.
+
+1. Push this repo to GitHub.
+2. In the Render dashboard choose **New → Blueprint**, connect the repo, and apply. Render reads `render.yaml`, builds with `npm ci`, and starts `npm start`. You'll be asked for a payment method: the disk needs a paid plan (free plans wipe the filesystem on restart, which would delete everyone's entries).
+3. When the deploy finishes, open the `onrender.com` URL, create your account, and share the link with friends. Pushes to your default branch redeploy from GitHub by default.
+
+Good to know:
+
+- **One instance only.** SQLite lives on the disk, and Render doesn't allow scaling a service that has a disk, which suits it.
+- **Everything is in one file**, `/var/data/devlog.db` on the disk. Back it up if the entries matter to you.
+- **Sign-up is open** by default. To stop new accounts (for example once your friends have joined), add the environment variable `ALLOW_SIGNUP=false` in the Render dashboard.
+- **Privacy:** passwords are hashed, but entries are stored as plain text, so whoever runs the server can read them. Tell your users; the sign-up form says so too.
+- **Rate limiting** keys on the client IP as reported by the proxy (`TRUST_PROXY=1`, one hop). If Render has more than one proxy in front of the app, sign-up limits may be shared more widely than intended. Failed-login limits are per email, so they're unaffected.
+- After the first deploy, check in your browser's dev tools that the `devlog_sid` cookie is marked `Secure`.
+
 ## Layout
 
 ```
@@ -49,3 +66,7 @@ test/     node:test unit + API tests
 ```
 
 Not included: password reset (there's no email service, so back up `data/devlog.db` and keep your password safe) and data export.
+
+## Licence
+
+[MIT](LICENSE)

@@ -4,13 +4,14 @@
   "description": "A guided work journal for developers.",
   "type": "module",
   "private": true,
+  "license": "MIT",
   "scripts": {
     "start": "node server/index.js",
     "dev": "node --watch server/index.js",
     "test": "node --test \"test/*.test.js\""
   },
   "engines": {
-    "node": ">=20"
+    "node": ">=20 <25"
   },
   "dependencies": {
     "better-sqlite3": "^13.0.3",

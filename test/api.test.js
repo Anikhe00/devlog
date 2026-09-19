@@ -221,3 +221,9 @@ test('stats: streaks, weekly buckets, top tags', async () => {
   assert.equal(body.perWeek.length, 4);
   assert.deepEqual(body.topTags, [{ tag: 'a', count: 5 }, { tag: 'b', count: 4 }]);
 });
+
+test('health check answers without a session', async () => {
+  const res = await fetch(`${base}/health`);
+  assert.equal(res.status, 200);
+  assert.deepEqual(await res.json(), { ok: true });
+});

@@ -45,6 +45,7 @@ export function authView(mode, { allowSignup, onAuthed }) {
     ),
     error,
     submit,
+    isRegister && h('p', { class: 'hint' }, 'Entries are stored on this server, and whoever runs it can technically read them.'),
   );
 
   return h(
