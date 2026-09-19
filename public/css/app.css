@@ -664,6 +664,29 @@ button.tag {
   display: grid;
   gap: 14px;
 }
+/* Show/hide password: an eye button inside the field, on the right. */
+.password-field {
+  position: relative;
+}
+.password-field input {
+  padding-right: 48px;
+}
+.password-field .reveal {
+  position: absolute;
+  top: 50%;
+  right: 5px;
+  transform: translateY(-50%);
+  width: 38px;
+  height: 38px;
+  -webkit-tap-highlight-color: transparent; /* no square blue flash on phones; the button has its own hover state */
+}
+.reveal .icon-eye-off,
+.reveal[aria-pressed='true'] .icon-eye {
+  display: none;
+}
+.reveal[aria-pressed='true'] .icon-eye-off {
+  display: block;
+}
 .auth-switch {
   text-align: center;
 }
