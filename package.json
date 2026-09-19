@@ -1,0 +1,21 @@
+{
+  "name": "devlog",
+  "version": "1.0.0",
+  "description": "A guided work journal for developers.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "start": "node server/index.js",
+    "dev": "node --watch server/index.js",
+    "test": "node --test \"test/*.test.js\""
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "better-sqlite3": "^13.0.3",
+    "dompurify": "^3.4.15",
+    "express": "^5.2.1",
+    "marked": "^18.0.13"
+  }
+}
