@@ -1,18 +1,29 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { after, before, test } from 'node:test';
 import { createApp } from '../server/app.js';
+import { connect } from '../server/db.js';
 import { addDays, todayUtc, weekStart } from '../server/dates.js';
-import { openDb } from '../server/db.js';
 
 let server;
 let base;
+let db;
+let dir;
 
 before(async () => {
-  server = createApp({ db: openDb(':memory:'), registerLimit: Infinity }).listen(0, '127.0.0.1');
+  dir = fs.mkdtempSync(path.join(os.tmpdir(), 'devlog-test-'));
+  db = connect({ url: `file:${path.join(dir, 'test.db')}` });
+  server = createApp({ db, registerLimit: Infinity }).listen(0, '127.0.0.1');
   await new Promise((resolve) => server.once('listening', resolve));
   base = `http://127.0.0.1:${server.address().port}`;
 });
-after(() => server.close());
+after(async () => {
+  await new Promise((resolve) => server.close(resolve));
+  db.close();
+  fs.rmSync(dir, { recursive: true, force: true });
+});
 
 /** A tiny fetch wrapper that keeps its own cookie jar, like one browser. */
 function client() {

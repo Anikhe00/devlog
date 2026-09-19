@@ -1,3 +1,4 @@
+import { toObjects } from './db.js';
 import { addDays, isIsoDate, todayUtc, weekStart } from './dates.js';
 
 export const TEXT_FIELDS = ['worked_on', 'learned', 'shipped', 'blockers', 'next_steps'];
@@ -59,53 +60,86 @@ export function parseEntry(body) {
 
 const escapeLike = (s) => s.replace(/[\\%_]/g, (c) => `\\${c}`);
 
-/** Prepared queries and helpers for the entries tables. */
-export function createEntryStore(db) {
-  const insertEntry = db.prepare(`
-    INSERT INTO entries (user_id, cadence, period_date, worked_on, learned, shipped, blockers, next_steps, mood)
-    VALUES (@user_id, @cadence, @period_date, @worked_on, @learned, @shipped, @blockers, @next_steps, @mood)`);
-  const updateEntry = db.prepare(`
-    UPDATE entries SET cadence = @cadence, period_date = @period_date, worked_on = @worked_on,
-      learned = @learned, shipped = @shipped, blockers = @blockers, next_steps = @next_steps,
-      mood = @mood, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
-    WHERE id = @id AND user_id = @user_id`);
-  const deleteEntry = db.prepare('DELETE FROM entries WHERE id = ? AND user_id = ?');
-  const selectEntry = db.prepare('SELECT * FROM entries WHERE id = ? AND user_id = ?');
-  const deleteTags = db.prepare('DELETE FROM entry_tags WHERE entry_id = ?');
-  const insertTag = db.prepare('INSERT INTO entry_tags (entry_id, tag) VALUES (?, ?)');
+const INSERT_ENTRY = `
+  INSERT INTO entries (user_id, cadence, period_date, worked_on, learned, shipped, blockers, next_steps, mood)
+  VALUES (@user_id, @cadence, @period_date, @worked_on, @learned, @shipped, @blockers, @next_steps, @mood)`;
+const UPDATE_ENTRY = `
+  UPDATE entries SET cadence = @cadence, period_date = @period_date, worked_on = @worked_on,
+    learned = @learned, shipped = @shipped, blockers = @blockers, next_steps = @next_steps,
+    mood = @mood, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+  WHERE id = @id AND user_id = @user_id`;
 
-  function withTags(rows) {
+/** Queries and helpers for the entries tables. Every method is async. */
+export function createEntryStore(db) {
+  const all = async (sql, args = []) => toObjects(await db.execute({ sql, args }));
+
+  async function withTags(rows) {
     if (rows.length === 0) return rows;
-    const byId = new Map(rows.map((r) => [r.id, []]));
-    const marks = rows.map(() => '?').join(',');
-    const tagRows = db
-      .prepare(`SELECT entry_id, tag FROM entry_tags WHERE entry_id IN (${marks}) ORDER BY rowid`)
-      .all(...byId.keys());
+    const ids = rows.map((r) => r.id);
+    const tagRows = await all(
+      `SELECT entry_id, tag FROM entry_tags WHERE entry_id IN (${ids.map(() => '?').join(',')}) ORDER BY rowid`,
+      ids,
+    );
+    const byId = new Map(ids.map((id) => [id, []]));
     for (const { entry_id, tag } of tagRows) byId.get(entry_id).push(tag);
     return rows.map((r) => ({ ...r, tags: byId.get(r.id) }));
   }
 
-  const save = db.transaction((userId, id, value) => {
+  /** Inserts (id == null) or updates an entry and replaces its tags, atomically. Returns the id, or null if not found. */
+  async function save(userId, id, value) {
     const { tags, ...fields } = value;
-    let entryId = id;
-    if (id == null) {
-      entryId = insertEntry.run({ ...fields, user_id: userId }).lastInsertRowid;
-    } else if (updateEntry.run({ ...fields, id, user_id: userId }).changes === 0) {
-      return null;
+    const tx = await db.transaction('write');
+    try {
+      let entryId = id;
+      if (id == null) {
+        const res = await tx.execute({ sql: INSERT_ENTRY, args: { ...fields, user_id: userId } });
+        entryId = Number(res.lastInsertRowid);
+      } else {
+        const res = await tx.execute({ sql: UPDATE_ENTRY, args: { ...fields, id, user_id: userId } });
+        if (res.rowsAffected === 0) {
+          await tx.rollback();
+          return null;
+        }
+      }
+      await tx.execute({ sql: 'DELETE FROM entry_tags WHERE entry_id = ?', args: [entryId] });
+      if (tags.length) {
+        await tx.batch(tags.map((tag) => ({ sql: 'INSERT INTO entry_tags (entry_id, tag) VALUES (?, ?)', args: [entryId, tag] })));
+      }
+      await tx.commit();
+      return entryId;
+    } catch (err) {
+      await tx.rollback().catch(() => {});
+      throw err;
+    } finally {
+      tx.close();
     }
-    deleteTags.run(entryId);
-    for (const tag of tags) insertTag.run(entryId, tag);
-    return Number(entryId);
-  });
+  }
 
   return {
-    get: (userId, id) => withTags(selectEntry.all(id, userId))[0] ?? null,
+    async get(userId, id) {
+      const rows = await all('SELECT * FROM entries WHERE id = ? AND user_id = ?', [id, userId]);
+      return (await withTags(rows))[0] ?? null;
+    },
     create: (userId, value) => save(userId, null, value),
     update: (userId, id, value) => save(userId, id, value),
-    remove: (userId, id) => deleteEntry.run(id, userId).changes > 0,
+
+    async remove(userId, id) {
+      // Tags first, and only if the entry is really this user's; then the entry itself.
+      const [, entry] = await db.batch(
+        [
+          {
+            sql: 'DELETE FROM entry_tags WHERE entry_id = ? AND entry_id IN (SELECT id FROM entries WHERE id = ? AND user_id = ?)',
+            args: [id, id, userId],
+          },
+          { sql: 'DELETE FROM entries WHERE id = ? AND user_id = ?', args: [id, userId] },
+        ],
+        'write',
+      );
+      return entry.rowsAffected > 0;
+    },
 
     /** Filtered, newest-first page of entries plus the total match count. */
-    search(userId, { q, tags = [], from, to, cadence, limit, offset }) {
+    async search(userId, { q, tags = [], from, to, cadence, limit, offset }) {
       const where = ['e.user_id = ?'];
       const params = [userId];
 
@@ -134,30 +168,29 @@ export function createEntryStore(db) {
       }
 
       const clause = where.join(' AND ');
-      const total = db.prepare(`SELECT COUNT(*) AS n FROM entries e WHERE ${clause}`).get(...params).n;
-      const rows = db
-        .prepare(`SELECT e.* FROM entries e WHERE ${clause} ORDER BY e.period_date DESC, e.id DESC LIMIT ? OFFSET ?`)
-        .all(...params, limit, offset);
-      return { entries: withTags(rows), total };
+      const [total, rows] = await Promise.all([
+        all(`SELECT COUNT(*) AS n FROM entries e WHERE ${clause}`, params),
+        all(`SELECT e.* FROM entries e WHERE ${clause} ORDER BY e.period_date DESC, e.id DESC LIMIT ? OFFSET ?`, [...params, limit, offset]),
+      ]);
+      return { entries: await withTags(rows), total: total[0].n };
     },
 
     allTags: (userId) =>
-      db
-        .prepare(`
-          SELECT t.tag, COUNT(*) AS count FROM entry_tags t
-          JOIN entries e ON e.id = t.entry_id WHERE e.user_id = ?
-          GROUP BY t.tag ORDER BY count DESC, t.tag`)
-        .all(userId),
+      all(
+        `SELECT t.tag, COUNT(*) AS count FROM entry_tags t
+         JOIN entries e ON e.id = t.entry_id WHERE e.user_id = ?
+         GROUP BY t.tag ORDER BY count DESC, t.tag`,
+        [userId],
+      ),
 
     topTagsSince: (userId, since, limit = 10) =>
-      db
-        .prepare(`
-          SELECT t.tag, COUNT(*) AS count FROM entry_tags t
-          JOIN entries e ON e.id = t.entry_id WHERE e.user_id = ? AND e.period_date >= ?
-          GROUP BY t.tag ORDER BY count DESC, t.tag LIMIT ?`)
-        .all(userId, since, limit),
+      all(
+        `SELECT t.tag, COUNT(*) AS count FROM entry_tags t
+         JOIN entries e ON e.id = t.entry_id WHERE e.user_id = ? AND e.period_date >= ?
+         GROUP BY t.tag ORDER BY count DESC, t.tag LIMIT ?`,
+        [userId, since, limit],
+      ),
 
-    statRows: (userId) =>
-      db.prepare('SELECT cadence, period_date, mood FROM entries WHERE user_id = ?').all(userId),
+    statRows: (userId) => all('SELECT cadence, period_date, mood FROM entries WHERE user_id = ?', [userId]),
   };
 }
