@@ -3,6 +3,7 @@ import { formatMonth, formatShort } from '../dates.js';
 import { debounce, h, setTitle } from '../dom.js';
 import { replaceUrl } from '../router.js';
 import { emptyState, entryCard, errorView } from './parts.js';
+import { entryListSkeleton } from './skeletons.js';
 
 const PAGE_SIZE = 20;
 
@@ -170,6 +171,7 @@ export async function historyView({ query }) {
 
   summary.append(activeChips, clear);
   syncControls();
+  list.append(entryListSkeleton()); // replaced as soon as the first page arrives
   load(true);
 
   return h(

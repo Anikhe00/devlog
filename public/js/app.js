@@ -7,7 +7,8 @@ import { dashboardView } from './views/dashboard.js';
 import { editEntryView, newEntryView } from './views/editor.js';
 import { entryView } from './views/entry.js';
 import { historyView } from './views/history.js';
-import { errorView, loading } from './views/parts.js';
+import { errorView } from './views/parts.js';
+import { skeletons } from './views/skeletons.js';
 import { settingsView } from './views/settings.js';
 import { statsView } from './views/stats.js';
 
@@ -15,13 +16,14 @@ const root = document.getElementById('app');
 let navigation = 0;
 
 const routes = [
-  [/^\/$/, dashboardView, '/'],
-  [/^\/new$/, newEntryView, '/new'],
-  [/^\/history$/, historyView, '/history'],
-  [/^\/stats$/, statsView, '/stats'],
-  [/^\/settings$/, () => settingsView({ onSignOut: signOut }), '/settings'],
-  [/^\/entry\/(\d+)$/, entryView, '/history'],
-  [/^\/entry\/(\d+)\/edit$/, editEntryView, '/history'],
+  // [pattern, view, which nav item is active, which skeleton to show while it loads]
+  [/^\/$/, dashboardView, '/', 'dashboard'],
+  [/^\/new$/, newEntryView, '/new', 'editor'],
+  [/^\/history$/, historyView, '/history', 'history'],
+  [/^\/stats$/, statsView, '/stats', 'stats'],
+  [/^\/settings$/, () => settingsView({ onSignOut: signOut }), '/settings'], // nothing to fetch, so no skeleton
+  [/^\/entry\/(\d+)$/, entryView, '/history', 'entry'],
+  [/^\/entry\/(\d+)\/edit$/, editEntryView, '/history', 'editor'],
 ];
 
 function toggleTheme() {
@@ -90,7 +92,7 @@ async function render() {
   if (path === '/login' || path === '/register') return navigate('/', { replace: true });
 
   const route = routes.find(([re]) => re.test(path));
-  const main = h('main', { id: 'main', class: 'container', tabindex: -1 }, loading());
+  const main = h('main', { id: 'main', class: 'container', tabindex: -1 }, skeletons[route?.[3]]?.());
   const writing = /^\/(new|entry\/\d+\/edit)$/.test(path);
   // Not our h() helper: the DOM's replaceChildren turns a null argument into the text "null", so leave it out.
   root.replaceChildren(...[nav(route?.[2] ?? ''), main, writing ? null : tabbar(route?.[2] ?? '')].filter(Boolean));
