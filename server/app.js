@@ -8,6 +8,9 @@ import {
   SESSION_TTL_MS,
   createSessionStore,
   hashPassword,
+  hashToken,
+  newToken,
+  passwordProblem,
   rateLimit,
   readCookie,
   verifyPassword,
@@ -15,11 +18,14 @@ import {
 import { initSchema, toObjects } from './db.js';
 import { isIsoDate, todayUtc } from './dates.js';
 import { createEntryStore, normalizeTags, parseEntry } from './entries.js';
+import { createMailer, resetEmail } from './mailer.js';
 import { buildStats } from './stats.js';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const MAX_PAGE_SIZE = 100;
+const RESET_TTL_MS = 30 * 60_000;
+const INVALID_LINK = 'That reset link is invalid or has expired. Request a new one.';
 
 const clampInt = (value, fallback, min, max) => {
   const n = Number.parseInt(value, 10);
@@ -27,8 +33,12 @@ const clampInt = (value, fallback, min, max) => {
 };
 const asList = (v) => (v == null ? [] : Array.isArray(v) ? v : [v]);
 
-/** @param db a @libsql/client client (local file or hosted Turso database) */
-export function createApp({ db, allowSignup = true, registerLimit = 10 }) {
+/**
+ * @param db     a @libsql/client client (local file or hosted Turso database)
+ * @param mailer see mailer.js; injected so tests can capture what would be sent
+ * @param appUrl the public address of the site, used to build links in emails (APP_URL)
+ */
+export function createApp({ db, allowSignup = true, registerLimit = 10, mailer = createMailer(), appUrl = process.env.APP_URL }) {
   const app = express();
   const sessions = createSessionStore(db);
   const entries = createEntryStore(db);
@@ -117,7 +127,17 @@ export function createApp({ db, allowSignup = true, registerLimit = 10 }) {
   });
   const registerLimiter = rateLimit({ db, name: 'register', windowMs: 60 * 60_000, max: registerLimit, key: (req) => req.ip });
 
-  app.get('/api/auth/me', (req, res) => res.json({ user: req.user, allowSignup }));
+  // Where emailed links point. Never build this from the Host header: it's attacker-controlled, and
+  // trusting it is how reset links get hijacked. Configured address, or localhost while developing.
+  const publicUrl = (req) => {
+    if (appUrl) return appUrl.replace(/\/+$/, '');
+    const host = req.get('host') ?? '';
+    return /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(host) ? `${req.protocol}://${host}` : null;
+  };
+  // The "Forgot password?" link only shows when it can really work.
+  const canReset = (req) => mailer.enabled && publicUrl(req) !== null;
+
+  app.get('/api/auth/me', (req, res) => res.json({ user: req.user, allowSignup, resetEnabled: canReset(req) }));
 
   app.post('/api/auth/register', registerLimiter, async (req, res) => {
     if (!allowSignup) return res.status(403).json({ error: 'Sign-ups are disabled on this instance.' });
@@ -125,12 +145,8 @@ export function createApp({ db, allowSignup = true, registerLimit = 10 }) {
     if (typeof email !== 'string' || !EMAIL_RE.test(email.trim()) || email.length > 254) {
       return res.status(400).json({ error: 'Enter a valid email address.' });
     }
-    if (typeof password !== 'string' || password.length < 8) {
-      return res.status(400).json({ error: 'Password must be at least 8 characters.' });
-    }
-    if (password.length > MAX_PASSWORD_LENGTH) {
-      return res.status(400).json({ error: `Password must be at most ${MAX_PASSWORD_LENGTH} characters.` });
-    }
+    const problem = passwordProblem(password);
+    if (problem) return res.status(400).json({ error: problem });
     let userId;
     try {
       const info = await db.execute({
@@ -164,6 +180,100 @@ export function createApp({ db, allowSignup = true, registerLimit = 10 }) {
   app.post('/api/auth/logout', async (req, res) => {
     if (req.sessionToken) await sessions.destroy(req.sessionToken);
     res.clearCookie(COOKIE_NAME, { path: '/' });
+    res.json({ ok: true });
+  });
+
+  // ---- forgot / reset / change password -----------------------------------
+  const forgotIpLimiter = rateLimit({ db, name: 'forgot-ip', windowMs: 60 * 60_000, max: 10, key: (req) => req.ip });
+  const forgotEmailLimiter = rateLimit({
+    db,
+    name: 'forgot-email',
+    windowMs: 60 * 60_000,
+    max: 3,
+    key: (req) => String(req.body?.email ?? '').trim().toLowerCase().slice(0, 254),
+  });
+  const resetLimiter = rateLimit({ db, name: 'reset', windowMs: 60 * 60_000, max: 10, key: (req) => req.ip });
+  const changeLimiter = rateLimit({ db, name: 'change-password', windowMs: 15 * 60_000, max: 10, key: (req) => String(req.user.id) });
+
+  // Always answers the same way, whether or not the email has an account, so it can't be used to
+  // find out who is registered.
+  app.post('/api/auth/forgot', forgotIpLimiter, forgotEmailLimiter, async (req, res) => {
+    const email = req.body?.email;
+    if (typeof email !== 'string' || !EMAIL_RE.test(email.trim()) || email.length > 254) {
+      return res.status(400).json({ error: 'Enter a valid email address.' });
+    }
+    if (!canReset(req)) return res.status(503).json({ error: 'Password reset by email is not set up on this server.' });
+
+    const user = toObjects(await db.execute({ sql: 'SELECT id, email FROM users WHERE email = ?', args: [email.trim()] }))[0];
+    if (user) {
+      const token = newToken();
+      // One live link per account: asking again cancels the previous one.
+      await db.batch(
+        [
+          { sql: 'DELETE FROM password_resets WHERE user_id = ?', args: [user.id] },
+          { sql: 'INSERT INTO password_resets (token_hash, user_id, expires_at) VALUES (?, ?, ?)', args: [hashToken(token), user.id, Date.now() + RESET_TTL_MS] },
+        ],
+        'write',
+      );
+      try {
+        await mailer.send({ to: user.email, ...resetEmail({ link: `${publicUrl(req)}/#/reset?token=${token}`, minutes: RESET_TTL_MS / 60_000 }) });
+      } catch (err) {
+        console.error('Could not send the password reset email:', err.message); // logged, but the answer stays generic
+      }
+    }
+    res.json({ ok: true });
+  });
+
+  app.post('/api/auth/reset', resetLimiter, async (req, res) => {
+    const { token, password } = req.body ?? {};
+    const problem = passwordProblem(password); // check before the link is used up
+    if (problem) return res.status(400).json({ error: problem });
+    if (typeof token !== 'string' || token.length < 20 || token.length > 200) return res.status(400).json({ error: INVALID_LINK });
+
+    const passwordHash = await hashPassword(password);
+    const now = Date.now();
+    // Atomic: only one request can ever claim a given link, and only before it expires.
+    const claimed = toObjects(
+      await db.execute({
+        sql: 'UPDATE password_resets SET used_at = ? WHERE token_hash = ? AND used_at IS NULL AND expires_at > ? RETURNING user_id',
+        args: [now, hashToken(token), now],
+      }),
+    )[0];
+    if (!claimed) return res.status(400).json({ error: INVALID_LINK });
+
+    await db.batch(
+      [
+        { sql: 'UPDATE users SET password_hash = ? WHERE id = ?', args: [passwordHash, claimed.user_id] },
+        { sql: 'DELETE FROM sessions WHERE user_id = ?', args: [claimed.user_id] }, // whoever had the old password is signed out
+        { sql: 'DELETE FROM password_resets WHERE user_id = ?', args: [claimed.user_id] },
+      ],
+      'write',
+    );
+    res.clearCookie(COOKIE_NAME, { path: '/' });
+    res.json({ ok: true });
+  });
+
+  app.post('/api/auth/password', requireUser, changeLimiter, async (req, res) => {
+    const { current, next } = req.body ?? {};
+    if (typeof current !== 'string' || !current || current.length > MAX_PASSWORD_LENGTH) {
+      return res.status(400).json({ error: 'Enter your current password.' });
+    }
+    const problem = passwordProblem(next);
+    if (problem) return res.status(400).json({ error: problem });
+
+    const row = toObjects(await db.execute({ sql: 'SELECT password_hash FROM users WHERE id = ?', args: [req.user.id] }))[0];
+    if (!(await verifyPassword(current, row.password_hash))) {
+      return res.status(400).json({ error: 'Your current password is incorrect.' });
+    }
+    await db.batch(
+      [
+        { sql: 'UPDATE users SET password_hash = ? WHERE id = ?', args: [await hashPassword(next), req.user.id] },
+        // Other devices are signed out; this one stays signed in.
+        { sql: 'DELETE FROM sessions WHERE user_id = ? AND token_hash != ?', args: [req.user.id, hashToken(req.sessionToken)] },
+        { sql: 'DELETE FROM password_resets WHERE user_id = ?', args: [req.user.id] },
+      ],
+      'write',
+    );
     res.json({ ok: true });
   });
 
