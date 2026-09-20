@@ -533,10 +533,67 @@ button.tag {
 .dot.on {
   background: var(--accent);
 }
-.loading {
-  color: var(--muted);
+/* ---- skeleton loading placeholders ------------------------------------ */
+/* Held back for 150 ms so a fast load never flashes them, then faded in. */
+.skeleton {
   opacity: 0;
-  animation: fade-in 0.2s 0.35s forwards;
+  animation: fade-in 0.2s 0.15s forwards;
+  pointer-events: none; /* they reuse the real card classes, so don't pick up hover effects */
+}
+.sk {
+  display: block;
+  max-width: 100%;
+  border-radius: 6px;
+  background-color: var(--surface-2);
+  background-image: linear-gradient(100deg, transparent 30%, var(--wash) 50%, transparent 70%);
+  background-size: 300% 100%;
+  background-repeat: no-repeat;
+  animation: shimmer 1.6s ease-in-out infinite;
+}
+@keyframes shimmer {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0 0;
+  }
+}
+.sk-pill {
+  border-radius: 999px;
+}
+.sk-stack {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+.sk-lines {
+  gap: 12px; /* text lines are ~24px tall on the real page; bars are 15px, so space them out to match */
+}
+.sk-row {
+  display: flex;
+  gap: 6px;
+}
+.sk-tagrow {
+  align-items: center;
+  gap: 12px;
+}
+.sk-grow {
+  flex: 1;
+}
+.sk-spacer {
+  flex: 1;
+}
+.sk-chart,
+.sk-field {
+  border-radius: 8px;
+}
+.skeleton .streak .sk:first-child {
+  flex: none;
+}
+@media (max-width: 560px) {
+  .sk-hero-btn {
+    display: none; /* the real "+ New Entry" button is hidden on phones too (the tab bar has one) */
+  }
 }
 @keyframes fade-in {
   to {
@@ -1370,6 +1427,13 @@ button.tag {
 @media (prefers-reduced-motion: reduce) {
   .cursor {
     animation: none;
+  }
+  .skeleton {
+    opacity: 1;
+    animation: none;
+  }
+  .sk {
+    animation: none; /* still visible as flat blocks, just not sweeping */
   }
   * {
     transition: none !important;

@@ -61,8 +61,6 @@ export function entryBody(entry) {
   return h('div', { class: 'entry-body' }, sections);
 }
 
-export const loading = () => h('p', { class: 'loading mono', role: 'status' }, 'loading…');
-
 export function emptyState({ title, body, action }) {
   return h('div', { class: 'empty' }, h('p', { class: 'empty-title' }, title), body && h('p', { class: 'muted' }, body), action);
 }
