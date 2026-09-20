@@ -41,6 +41,15 @@ CREATE TABLE IF NOT EXISTS entry_tags (
 );
 CREATE INDEX IF NOT EXISTS idx_entry_tags_tag ON entry_tags(tag);
 
+-- One-time password reset links. Only a hash of the token is stored, never the token itself.
+CREATE TABLE IF NOT EXISTS password_resets (
+  token_hash TEXT PRIMARY KEY,
+  user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  expires_at INTEGER NOT NULL,
+  used_at    INTEGER
+);
+CREATE INDEX IF NOT EXISTS idx_password_resets_user ON password_resets(user_id);
+
 -- Fixed-window counters for login / sign-up throttling. They live in the database rather
 -- than in memory so the limit still holds when the host runs many short-lived instances.
 CREATE TABLE IF NOT EXISTS rate_limits (

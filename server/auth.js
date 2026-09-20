@@ -33,6 +33,15 @@ export async function verifyPassword(password, stored) {
 export const DUMMY_HASH = await hashPassword(crypto.randomBytes(16).toString('hex'));
 
 const sha256 = (value) => crypto.createHash('sha256').update(value).digest('hex');
+export const hashToken = sha256;
+export const newToken = () => crypto.randomBytes(32).toString('base64url');
+
+/** The one place the password rules live. Returns a message, or null when the password is fine. */
+export function passwordProblem(password) {
+  if (typeof password !== 'string' || password.length < 8) return 'Password must be at least 8 characters.';
+  if (password.length > MAX_PASSWORD_LENGTH) return `Password must be at most ${MAX_PASSWORD_LENGTH} characters.`;
+  return null;
+}
 
 /** Opaque random tokens in a cookie; only their hash is stored server-side. */
 export function createSessionStore(db) {
@@ -61,6 +70,7 @@ export function createSessionStore(db) {
         [
           { sql: 'DELETE FROM sessions WHERE expires_at <= ?', args: [now] },
           { sql: 'DELETE FROM rate_limits WHERE reset_at <= ?', args: [now] },
+          { sql: 'DELETE FROM password_resets WHERE expires_at <= ?', args: [now] },
         ],
         'write',
       );

@@ -36,6 +36,10 @@ Create an account on the sign-in screen and start writing. Requires Node 22. Loc
 | `PORT`                | `3000`             | Port for `npm start`                                                                        |
 | `HOST`                | `127.0.0.1`        | Bind address for `npm start`. Localhost-only by default because this is personal data       |
 | `TRUST_PROXY`         | unset (`1` on Vercel) | Number of proxies in front of the app, so cookies get `Secure` and rate limits see the real client IP |
+| `APP_URL`             | unset              | The site's public address (e.g. `https://your-app.vercel.app`). Links in emails are built from this, never from the request |
+| `BREVO_API_KEY`       | unset              | Turns on password-reset emails through [Brevo](https://www.brevo.com/) (see below)          |
+| `EMAIL_FROM`          | unset              | The verified sender address the emails come from (needed with `BREVO_API_KEY`)              |
+| `EMAIL_FROM_NAME`     | `DevLog`           | Display name on those emails                                                                |
 
 `npm run dev` restarts on file changes; `npm test` runs the test suite.
 
@@ -53,7 +57,7 @@ Create an account on the sign-in screen and start writing. Requires Node 22. Loc
 
 ## Design / security notes
 
-- Passwords are hashed with scrypt. Sessions are random tokens in an `HttpOnly`, `SameSite=Lax` cookie; only a hash of the token is stored. Login and sign-up are rate limited, and login timing doesn't reveal whether an email exists.
+- Passwords are hashed with scrypt. Sessions are random tokens in an `HttpOnly`, `SameSite=Lax` cookie; only a hash of the token is stored. Login and sign-up are rate limited, and login timing doesn't reveal whether an email exists. Password reset is covered in its own section below.
 - All queries are scoped to the signed-in user and parameterised.
 - Markdown is sanitised with DOMPurify, and a strict CSP (`default-src 'self'`) is sent with every response. There are no external fonts, scripts or requests.
 - The client sends its own local date for "today", so streaks follow *your* timezone, not the server's.
@@ -85,6 +89,26 @@ Good to know:
 - After deploying, check in your browser's dev tools that the `devlog_sid` cookie is marked `Secure`.
 - You can also run it on any Node host with a persistent disk: `npm start` with `DATABASE_URL=file:/path/on/the/disk/devlog.db`.
 
+## Password reset
+
+Forgot your password? **Sign in → Forgot password?** emails a link. Signed-in users can also change their password under **Settings**.
+
+- Each link is a 256-bit random token that works **once** and expires after **30 minutes**. Only a hash of it is stored, and asking again cancels the previous link.
+- "Forgot password?" gives the same answer whether or not the address has an account, and requests are rate limited per address and per IP.
+- The link is built from `APP_URL` (or `localhost` in development), never from the request's `Host` header, which an attacker controls.
+- A reset, or a password change, signs out the account's other sessions.
+- The link is only shown when the server can actually send email. With no provider configured, **the "Forgot password?" link is hidden** and password reset isn't available.
+- Locally, with no provider set, the email is printed to the server's console instead of sent, which is handy for trying it out.
+- One known limit: sign-up answers "an account with that email already exists", so an address can still be checked that way while sign-up is open.
+
+**Turning on email in production (Brevo's free plan needs no card):**
+
+1. Create a [Brevo](https://www.brevo.com/) account, add and verify a **sender** (your own email address works to start), and create an **API key**. Follow Brevo's own docs for the exact screens.
+2. In Vercel's Environment Variables add `BREVO_API_KEY` (the key), `EMAIL_FROM` (the verified sender address) and `APP_URL` (your site's address, no trailing slash). Optionally `EMAIL_FROM_NAME`. Redeploy.
+3. Try "Forgot password?" with an account you own.
+
+Without a domain of your own, Brevo can't authenticate a free-mail sender such as Gmail, so it substitutes a compliant sender address, and messages are more likely to land in **spam**. If that matters, authenticate a domain you own in Brevo. Emails are sent by a small adapter in `server/mailer.js`, so another provider is a small change.
+
 ## Layout
 
 ```
@@ -95,7 +119,7 @@ scripts/  copy-vendor.js copies the browser libraries into public/vendor on inst
 test/     node:test unit + API tests
 ```
 
-Not included: password reset (there's no email service, so keep your password safe and back up your database) and data export.
+Not included: data export. If you run this without an email provider there is no self-service password reset, so keep your password safe and back up your database.
 
 ## Licence
 

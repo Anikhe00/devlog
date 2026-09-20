@@ -744,6 +744,14 @@ button.tag {
 .reveal[aria-pressed='true'] .icon-eye-off {
   display: block;
 }
+.auth-stack {
+  display: grid;
+  gap: 12px;
+}
+.forgot-link {
+  align-self: flex-end;
+  font-size: 0.85rem;
+}
 .auth-switch {
   text-align: center;
 }
@@ -1411,6 +1419,12 @@ button.tag {
 }
 
 /* ---- settings ---------------------------------------------------------- */
+.settings-form {
+  display: grid;
+  gap: 14px;
+  width: 100%;
+  max-width: 420px;
+}
 .settings {
   display: grid;
   gap: 12px;

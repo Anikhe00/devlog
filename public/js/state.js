@@ -1,1 +1,1 @@
-export const state = { user: null, allowSignup: true };
+export const state = { user: null, allowSignup: true, resetEnabled: false };

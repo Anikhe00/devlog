@@ -2,7 +2,7 @@ import { ApiError, api, setUnauthorizedHandler } from './api.js';
 import { h, storage, svg } from './dom.js';
 import { navigate, parseHash } from './router.js';
 import { state } from './state.js';
-import { authView } from './views/auth.js';
+import { authView, forgotView, resetView } from './views/auth.js';
 import { dashboardView } from './views/dashboard.js';
 import { editEntryView, newEntryView } from './views/editor.js';
 import { entryView } from './views/entry.js';
@@ -14,6 +14,9 @@ import { statsView } from './views/stats.js';
 
 const root = document.getElementById('app');
 let navigation = 0;
+
+// Sign-in screens: open to everyone; anyone already signed in is sent home instead.
+const PUBLIC = new Set(['/login', '/register', '/forgot']);
 
 const routes = [
   // [pattern, view, which nav item is active, which skeleton to show while it loads]
@@ -82,14 +85,34 @@ async function render() {
   const current = ++navigation;
   const { path, query } = parseHash();
 
+  // An emailed reset link works whether or not this browser happens to be signed in.
+  if (path === '/reset') {
+    root.replaceChildren(resetView({ token: query.get('token') ?? '', onDone: () => { state.user = null; navigate('/login?reset=1'); } }));
+    document.getElementById('new-password')?.focus();
+    return;
+  }
+
   if (!state.user) {
-    if (path !== '/login' && path !== '/register') return navigate('/login', { replace: true });
+    if (!PUBLIC.has(path)) return navigate('/login', { replace: true });
+    if (path === '/forgot') {
+      if (!state.resetEnabled) return navigate('/login', { replace: true }); // this server can't send the email
+      root.replaceChildren(forgotView());
+      document.getElementById('email')?.focus();
+      return;
+    }
     const mode = path === '/register' && state.allowSignup ? 'register' : 'login';
-    root.replaceChildren(authView(mode, { allowSignup: state.allowSignup, onAuthed: (user) => { state.user = user; navigate('/'); } }));
+    root.replaceChildren(
+      authView(mode, {
+        allowSignup: state.allowSignup,
+        resetEnabled: state.resetEnabled,
+        notice: query.get('reset') ? 'Password updated. Sign in with your new password.' : null,
+        onAuthed: (user) => { state.user = user; navigate('/'); },
+      }),
+    );
     document.getElementById('email')?.focus();
     return;
   }
-  if (path === '/login' || path === '/register') return navigate('/', { replace: true });
+  if (PUBLIC.has(path)) return navigate('/', { replace: true });
 
   const route = routes.find(([re]) => re.test(path));
   const main = h('main', { id: 'main', class: 'container', tabindex: -1 }, skeletons[route?.[3]]?.());
@@ -121,6 +144,7 @@ async function boot() {
     const me = await api.get('/api/auth/me');
     state.user = me.user;
     state.allowSignup = me.allowSignup;
+    state.resetEnabled = me.resetEnabled;
   } catch (err) {
     root.replaceChildren(errorView(err, () => location.reload()));
     return;
