@@ -108,18 +108,6 @@ export function landingView({ allowSignup, themeButton }) {
     ),
   );
 
-  const phone = h(
-    'section',
-    { class: 'lp-section lp-inner lp-split', 'aria-labelledby': 'lp-phone-h' },
-    h(
-      'div',
-      null,
-      h('h2', { id: 'lp-phone-h' }, 'A quick check-in, on any screen'),
-      h('p', { class: 'lp-section-lead' }, 'On a phone the navigation moves to a tab bar within thumb reach, with a New button in the middle. Dark by default, and a light theme when you want it.'),
-    ),
-    h('figure', { class: 'lp-shot lp-phone' }, shot('mobile', 480, 1038, 'DevLog on a phone, with a bottom tab bar and a raised New button')),
-  );
-
   const final = h(
     'section',
     { class: 'lp-inner lp-final-wrap' },
@@ -174,5 +162,5 @@ export function landingView({ allowSignup, themeButton }) {
     ),
   );
 
-  return h('div', { class: 'lp' }, nav, h('main', { id: 'main', tabindex: -1 }, hero, prompts, features, gallery, phone, final), footer);
+  return h('div', { class: 'lp' }, nav, h('main', { id: 'main', tabindex: -1 }, hero, prompts, features, gallery, final), footer);
 }

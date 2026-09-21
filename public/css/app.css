@@ -912,15 +912,6 @@ button.tag {
   padding: 10px 14px;
   border-top: 1px solid var(--border);
 }
-.lp-split {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: 48px;
-  align-items: center;
-}
-.lp-phone {
-  width: 250px;
-}
 .lp-final-wrap {
   padding-top: 72px;
 }
@@ -1028,13 +1019,6 @@ button.tag {
   }
   .lp-grid {
     grid-template-columns: 1fr;
-  }
-  .lp-split {
-    grid-template-columns: 1fr;
-    gap: 28px;
-  }
-  .lp-phone {
-    margin: 0 auto;
   }
   .lp-section {
     padding-top: 48px;
