@@ -53,6 +53,8 @@ Create an account on the sign-in screen and start writing. Requires Node 22. Loc
 
 **History.** Newest first, grouped by month. Search keywords (all prompts and tags), filter by one or more tags (all must match), date range, and log type. Filters live in the URL, so a filtered view can be bookmarked. A weekly log matches any date range that overlaps its week.
 
+**Landing page.** Signed-out visitors see a short product page at `/` (what DevLog is, the five prompts, screenshots, and sign-up / sign-in buttons). Signed-in users go straight to their dashboard. If sign-ups are closed (`ALLOW_SIGNUP=false`) the page only offers Sign in.
+
 **Stats.** Entries per week, average mood per week, most-used tags, over 12/26/52 weeks. Charts are keyboard-navigable and every chart has a "view as table" fallback.
 
 ## Design / security notes
@@ -114,7 +116,7 @@ Without a domain of your own, Brevo can't authenticate a free-mail sender such a
 ```
 index.js  Entry point: the Express app (Vercel runs it; server/index.js listens on it)
 server/   API, auth, entries, stats, database access (libSQL client)
-public/   Static frontend: vanilla ES modules, no build step
+public/   Static frontend: vanilla ES modules, no build step (public/img holds the landing page's screenshots)
 scripts/  copy-vendor.js copies the browser libraries into public/vendor on install
 test/     node:test unit + API tests
 ```

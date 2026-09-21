@@ -1,0 +1,127 @@
+import { h } from '../dom.js';
+import { PROMPTS } from '../prompts.js';
+
+const REPO = 'https://github.com/Anikhe00/devlog';
+
+// Only things the app really does.
+const FEATURES = [
+  ['Guided, never blank', 'Five short prompts with coaching hints and example answers, so you always know what to write.'],
+  ['Daily or weekly', 'Log at whatever rhythm suits you. Choose per entry, or set a default.'],
+  ['Streaks that make sense', 'Day and week streaks. An unlogged "today" doesn\'t reset yours; skipping a whole period does.'],
+  ['Markdown built in', 'Bold, code, lists and task lists, with a Preview tab before you save.'],
+  ['Find anything', 'Search every entry, filter by tag and date range, and bookmark a filtered view.'],
+  ['See the pattern', 'Entries per week, mood over time and your most-used tags.'],
+];
+
+const img = (name, w, hgt, alt, { hero = false } = {}) =>
+  h('img', { src: `/img/${name}.jpg`, width: w, height: hgt, alt, decoding: 'async', loading: hero ? 'eager' : 'lazy', fetchpriority: hero ? 'high' : null });
+
+/** The page signed-out visitors see at "/": what DevLog is, and a way in. */
+export function landingView({ allowSignup, themeButton }) {
+  document.title = 'DevLog: a guided work journal for developers';
+
+  const primary = (cls = 'btn-lg') =>
+    allowSignup ? h('a', { class: `btn btn-primary ${cls}`, href: '#/register' }, 'Create your account') : h('a', { class: `btn btn-primary ${cls}`, href: '#/login' }, 'Sign in');
+
+  const nav = h(
+    'header',
+    { class: 'lp-nav' },
+    h(
+      'div',
+      { class: 'lp-inner lp-nav-inner' },
+      h('a', { class: 'brand', href: '#/' }, 'devlog', h('span', { class: 'cursor', 'aria-hidden': 'true' }, '_')),
+      h(
+        'div',
+        { class: 'lp-nav-actions' },
+        themeButton,
+        h('a', { class: 'btn btn-ghost btn-sm', href: '#/login' }, 'Sign in'),
+        allowSignup && h('a', { class: 'btn btn-primary btn-sm', href: '#/register' }, 'Create account'),
+      ),
+    ),
+  );
+
+  const hero = h(
+    'section',
+    { class: 'lp-hero lp-inner' },
+    h('p', { class: 'lp-eyebrow mono' }, '$ devlog new', h('span', { class: 'cursor', 'aria-hidden': 'true' }, '_')),
+    h('h1', null, 'A work journal that asks the questions for you.'),
+    h('p', { class: 'lp-lead' }, 'Five short prompts, daily or weekly. Capture what you worked on, learned and shipped without ever wondering what to write.'),
+    h('div', { class: 'lp-cta' }, primary(), allowSignup && h('a', { class: 'btn btn-lg', href: '#/login' }, 'Sign in')),
+    h('p', { class: 'lp-note mono' }, 'Free and open source · Dark by default · Works on your phone'),
+    h('figure', { class: 'lp-shot lp-hero-shot' }, img('new-entry', 1400, 1094, 'The DevLog new-entry form: numbered prompts with coaching hints and example placeholders', { hero: true })),
+  );
+
+  const prompts = h(
+    'section',
+    { class: 'lp-section lp-inner', 'aria-labelledby': 'lp-prompts-h' },
+    h('h2', { id: 'lp-prompts-h' }, "Five questions. That's the whole entry."),
+    h('p', { class: 'lp-section-lead' }, 'Skip any that don\'t apply. Add tags and a 1–5 mood rating if you like.'),
+    h(
+      'div',
+      { class: 'lp-term' },
+      h('div', { class: 'lp-term-bar mono', 'aria-hidden': 'true' }, '$ devlog new --daily'),
+      h(
+        'ol',
+        { class: 'lp-prompts' },
+        PROMPTS.map((p, i) => h('li', null, h('span', { class: 'idx mono' }, String(i + 1).padStart(2, '0')), h('div', null, h('p', { class: 'lp-q' }, p.question.daily), h('p', { class: 'lp-hint' }, p.hint.daily)))),
+      ),
+    ),
+  );
+
+  const features = h(
+    'section',
+    { class: 'lp-section lp-inner', 'aria-labelledby': 'lp-features-h' },
+    h('h2', { id: 'lp-features-h' }, 'Built to be opened every day'),
+    h('div', { class: 'lp-grid' }, FEATURES.map(([title, body]) => h('div', { class: 'card lp-feature' }, h('h3', null, title), h('p', { class: 'muted' }, body)))),
+  );
+
+  const gallery = h(
+    'section',
+    { class: 'lp-section lp-inner', 'aria-labelledby': 'lp-gallery-h' },
+    h('h2', { id: 'lp-gallery-h' }, 'Look back at what you did'),
+    h('p', { class: 'lp-section-lead' }, 'Your dashboard picks up where you left off, and the stats show how your weeks add up.'),
+    h(
+      'div',
+      { class: 'lp-gallery' },
+      h('figure', { class: 'lp-shot' }, img('dashboard', 1100, 845, 'The DevLog dashboard: day and week streaks, notes carried over from the last entry, and recent entries'), h('figcaption', { class: 'muted small' }, 'Dashboard')),
+      h('figure', { class: 'lp-shot' }, img('stats', 1100, 946, 'The stats page: entries per week, mood over time and most-used tags'), h('figcaption', { class: 'muted small' }, 'Stats')),
+    ),
+  );
+
+  const phone = h(
+    'section',
+    { class: 'lp-section lp-inner lp-split', 'aria-labelledby': 'lp-phone-h' },
+    h(
+      'div',
+      null,
+      h('h2', { id: 'lp-phone-h' }, 'A quick check-in, on any screen'),
+      h('p', { class: 'lp-section-lead' }, 'On a phone the navigation moves to a tab bar within thumb reach, with a New button in the middle. Dark by default, and a light theme when you want it.'),
+    ),
+    h('figure', { class: 'lp-shot lp-phone' }, img('mobile', 480, 1038, 'DevLog on a phone, with a bottom tab bar and a raised New button')),
+  );
+
+  const final = h(
+    'section',
+    { class: 'lp-inner lp-final-wrap' },
+    h(
+      'div',
+      { class: 'lp-final' },
+      h('h2', null, "Start today's entry"),
+      h('p', { class: 'muted' }, 'It takes about two minutes.'),
+      h('div', { class: 'lp-cta' }, primary(), allowSignup && h('a', { class: 'btn btn-lg', href: '#/login' }, 'Sign in')),
+    ),
+  );
+
+  const footer = h(
+    'footer',
+    { class: 'lp-footer' },
+    h(
+      'div',
+      { class: 'lp-inner lp-footer-inner' },
+      h('p', null, 'Open source under the MIT licence · ', h('a', { href: REPO, rel: 'noopener noreferrer' }, 'View the code on GitHub')),
+      h('p', { class: 'small' }, 'Entries are stored on the server, and whoever runs it can technically read them.'),
+    ),
+  );
+
+  return h('div', { class: 'lp' }, nav, h('main', { id: 'main', tabindex: -1 }, hero, prompts, features, gallery, phone, final), footer);
+}

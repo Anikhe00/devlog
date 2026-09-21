@@ -2,10 +2,7 @@ import { api } from '../api.js';
 import { h, setTitle } from '../dom.js';
 import { passwordField } from './password-field.js';
 
-const brand = () => [
-  h('div', { class: 'brand brand-lg' }, 'devlog', h('span', { class: 'cursor', 'aria-hidden': 'true' }, '_')),
-  h('p', { class: 'auth-tagline' }, 'A guided work journal for developers. Five short prompts, no blank page.'),
-];
+const brand = () => h('a', { class: 'brand brand-lg', href: '#/', 'aria-label': 'devlog home' }, 'devlog', h('span', { class: 'cursor', 'aria-hidden': 'true' }, '_'));
 const screen = (...children) => h('main', { id: 'main', class: 'auth' }, h('div', { class: 'auth-card' }, brand(), children));
 
 /** Runs an async submit handler with the button disabled and any error shown in `error`. */

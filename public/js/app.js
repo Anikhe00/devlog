@@ -7,6 +7,7 @@ import { dashboardView } from './views/dashboard.js';
 import { editEntryView, newEntryView } from './views/editor.js';
 import { entryView } from './views/entry.js';
 import { historyView } from './views/history.js';
+import { landingView } from './views/landing.js';
 import { errorView } from './views/parts.js';
 import { skeletons } from './views/skeletons.js';
 import { settingsView } from './views/settings.js';
@@ -93,7 +94,12 @@ async function render() {
   }
 
   if (!state.user) {
-    if (!PUBLIC.has(path)) return navigate('/login', { replace: true });
+    if (path === '/') {
+      root.replaceChildren(landingView({ allowSignup: state.allowSignup, themeButton }));
+      window.scrollTo(0, 0);
+      return;
+    }
+    if (!PUBLIC.has(path)) return navigate('/login', { replace: true }); // a deep link to a private page: sign in first
     if (path === '/forgot') {
       if (!state.resetEnabled) return navigate('/login', { replace: true }); // this server can't send the email
       root.replaceChildren(forgotView());
