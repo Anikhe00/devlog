@@ -116,7 +116,7 @@ Without a domain of your own, Brevo can't authenticate a free-mail sender such a
 ```
 index.js  Entry point: the Express app (Vercel runs it; server/index.js listens on it)
 server/   API, auth, entries, stats, database access (libSQL client)
-public/   Static frontend: vanilla ES modules, no build step (public/img holds the landing page's screenshots)
+public/   Static frontend: vanilla ES modules, no build step (public/img holds the landing page's dark and light screenshots)
 scripts/  copy-vendor.js copies the browser libraries into public/vendor on install
 test/     node:test unit + API tests
 ```

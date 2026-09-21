@@ -13,8 +13,28 @@ const FEATURES = [
   ['See the pattern', 'Entries per week, mood over time and your most-used tags.'],
 ];
 
-const img = (name, w, hgt, alt, { hero = false } = {}) =>
-  h('img', { src: `/img/${name}.jpg`, width: w, height: hgt, alt, decoding: 'async', loading: hero ? 'eager' : 'lazy', fetchpriority: hero ? 'high' : null });
+/**
+ * Each screenshot exists in a dark and a light version and CSS shows the one for the current theme
+ * (the theme is a data-theme attribute the user can toggle, so <picture> can't pick it). Everything is
+ * lazy except the hero image for the theme you're already in; a hidden lazy image is never fetched.
+ */
+const shot = (name, w, hgt, alt, { hero = false } = {}) => {
+  const light = document.documentElement.dataset.theme === 'light';
+  const make = (suffix, cls, current) =>
+    h('img', { class: cls, src: `/img/${name}${suffix}.jpg`, width: w, height: hgt, alt, decoding: 'async', loading: hero && current ? 'eager' : 'lazy', fetchpriority: hero && current ? 'high' : null });
+  return [make('', 'lp-dark', !light), make('-light', 'lp-light', light)];
+};
+
+/** In-page links: the app routes on the URL hash, so these scroll instead of changing it. */
+const scrollTo = (id) => (e) => {
+  e.preventDefault();
+  const target = document.getElementById(id);
+  if (!target) return;
+  const still = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  target.scrollIntoView({ behavior: still ? 'auto' : 'smooth', block: 'start' });
+  target.setAttribute('tabindex', '-1');
+  target.focus({ preventScroll: true });
+};
 
 /** The page signed-out visitors see at "/": what DevLog is, and a way in. */
 export function landingView({ allowSignup, themeButton }) {
@@ -48,7 +68,7 @@ export function landingView({ allowSignup, themeButton }) {
     h('p', { class: 'lp-lead' }, 'Five short prompts, daily or weekly. Capture what you worked on, learned and shipped without ever wondering what to write.'),
     h('div', { class: 'lp-cta' }, primary(), allowSignup && h('a', { class: 'btn btn-lg', href: '#/login' }, 'Sign in')),
     h('p', { class: 'lp-note mono' }, 'Free and open source · Dark by default · Works on your phone'),
-    h('figure', { class: 'lp-shot lp-hero-shot' }, img('new-entry', 1400, 1094, 'The DevLog new-entry form: numbered prompts with coaching hints and example placeholders', { hero: true })),
+    h('figure', { class: 'lp-shot lp-hero-shot' }, shot('new-entry', 1400, 1094, 'The DevLog new-entry form: numbered prompts with coaching hints and example placeholders', { hero: true })),
   );
 
   const prompts = h(
@@ -83,8 +103,8 @@ export function landingView({ allowSignup, themeButton }) {
     h(
       'div',
       { class: 'lp-gallery' },
-      h('figure', { class: 'lp-shot' }, img('dashboard', 1100, 845, 'The DevLog dashboard: day and week streaks, notes carried over from the last entry, and recent entries'), h('figcaption', { class: 'muted small' }, 'Dashboard')),
-      h('figure', { class: 'lp-shot' }, img('stats', 1100, 946, 'The stats page: entries per week, mood over time and most-used tags'), h('figcaption', { class: 'muted small' }, 'Stats')),
+      h('figure', { class: 'lp-shot' }, shot('dashboard', 1100, 845, 'The DevLog dashboard: day and week streaks, notes carried over from the last entry, and recent entries'), h('figcaption', { class: 'muted small' }, 'Dashboard')),
+      h('figure', { class: 'lp-shot' }, shot('stats', 1100, 946, 'The stats page: entries per week, mood over time and most-used tags'), h('figcaption', { class: 'muted small' }, 'Stats')),
     ),
   );
 
@@ -97,7 +117,7 @@ export function landingView({ allowSignup, themeButton }) {
       h('h2', { id: 'lp-phone-h' }, 'A quick check-in, on any screen'),
       h('p', { class: 'lp-section-lead' }, 'On a phone the navigation moves to a tab bar within thumb reach, with a New button in the middle. Dark by default, and a light theme when you want it.'),
     ),
-    h('figure', { class: 'lp-shot lp-phone' }, img('mobile', 480, 1038, 'DevLog on a phone, with a bottom tab bar and a raised New button')),
+    h('figure', { class: 'lp-shot lp-phone' }, shot('mobile', 480, 1038, 'DevLog on a phone, with a bottom tab bar and a raised New button')),
   );
 
   const final = h(
@@ -112,14 +132,45 @@ export function landingView({ allowSignup, themeButton }) {
     ),
   );
 
+  const link = ([label, href, opts = {}]) =>
+    h('li', null, h('a', { href, onclick: opts.onclick, target: opts.external ? '_blank' : null, rel: opts.external ? 'noopener noreferrer' : null }, label));
+  const column = (title, items) =>
+    h('nav', { class: 'lp-footer-col', 'aria-label': title }, h('h2', { class: 'lp-footer-h mono' }, title), h('ul', null, items.filter(Boolean).map(link)));
+
   const footer = h(
     'footer',
     { class: 'lp-footer' },
     h(
       'div',
-      { class: 'lp-inner lp-footer-inner' },
-      h('p', null, 'Open source under the MIT licence · ', h('a', { href: REPO, rel: 'noopener noreferrer' }, 'View the code on GitHub')),
-      h('p', { class: 'small' }, 'Entries are stored on the server, and whoever runs it can technically read them.'),
+      { class: 'lp-inner' },
+      h(
+        'div',
+        { class: 'lp-footer-top' },
+        h(
+          'div',
+          { class: 'lp-footer-brand' },
+          h('a', { class: 'brand', href: '#/' }, 'devlog', h('span', { class: 'cursor', 'aria-hidden': 'true' }, '_')),
+          h('p', { class: 'muted' }, 'A guided work journal for developers. Five short prompts, daily or weekly, and no blank page.'),
+        ),
+        column('Product', [
+          ['The five prompts', '#/', { onclick: scrollTo('lp-prompts-h') }],
+          ['Features', '#/', { onclick: scrollTo('lp-features-h') }],
+          ['Screenshots', '#/', { onclick: scrollTo('lp-gallery-h') }],
+        ]),
+        column('Get started', [['Sign in', '#/login'], allowSignup && ['Create account', '#/register']]),
+        column('Project', [
+          ['Source on GitHub', REPO, { external: true }],
+          ['Report an issue', `${REPO}/issues`, { external: true }],
+          ['MIT licence', `${REPO}/blob/main/LICENSE`, { external: true }],
+        ]),
+      ),
+      h(
+        'div',
+        { class: 'lp-footer-bottom' },
+        h('p', null, `© ${new Date().getFullYear()} DevLog. Open source under the MIT licence.`),
+        h('p', { class: 'mono' }, 'Built with Node, Express and libSQL'),
+        h('a', { href: '#/', onclick: (e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: window.matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth' }); } }, 'Back to top ↑'),
+      ),
     ),
   );
 

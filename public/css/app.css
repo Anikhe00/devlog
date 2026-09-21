@@ -938,16 +938,81 @@ button.tag {
 .lp-final .muted {
   margin-top: 8px;
 }
+/* one screenshot per theme; the theme is a data-theme attribute, so this is CSS, not <picture> */
+.lp .lp-light {
+  display: none;
+}
+:root[data-theme='light'] .lp .lp-light {
+  display: block;
+}
+:root[data-theme='light'] .lp .lp-dark {
+  display: none;
+}
 .lp-footer {
   margin-top: 72px;
   border-top: 1px solid var(--border);
-  padding: 28px 0 44px;
-  color: var(--muted);
-  font-size: 0.9rem;
+  background: var(--surface);
+  font-size: 0.92rem;
 }
-.lp-footer-inner {
+.lp-footer-top {
   display: grid;
-  gap: 6px;
+  grid-template-columns: 1.7fr 1fr 1fr 1fr;
+  gap: 36px;
+  padding: 44px 0 36px;
+}
+.lp-footer-brand {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  max-width: 22rem;
+}
+.lp-footer-brand .brand {
+  font-size: 1.2rem;
+}
+.lp-footer-h {
+  margin: 0 0 12px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.lp-footer-col ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 8px;
+}
+.lp-footer-col a {
+  color: var(--text-2);
+}
+.lp-footer-col a:hover {
+  color: var(--accent);
+}
+.lp-footer-bottom {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px 24px;
+  padding: 18px 0 32px;
+  border-top: 1px solid var(--border);
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+.lp-footer-bottom .mono {
+  font-size: 0.8rem;
+}
+@media (max-width: 720px) {
+  .lp-footer-top {
+    grid-template-columns: 1fr 1fr;
+    gap: 28px 20px;
+    padding-top: 36px;
+  }
+  .lp-footer-brand {
+    grid-column: 1 / -1;
+  }
 }
 @media (max-width: 820px) {
   .lp-grid {
